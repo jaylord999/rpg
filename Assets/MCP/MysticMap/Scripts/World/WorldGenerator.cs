@@ -40,7 +40,7 @@ namespace MysticMap.World
         /// </summary>
         public bool IsLegacy(Vector2Int coord)
         {
-            if (Town == null) return false;
+            if (Town == null || !Town.HasUsableTown) return false;
             float s = ChunkSize;
             float x0 = coord.x * s, z0 = coord.y * s;
             return Town.OverlapsLegacy(x0, z0, x0 + s, z0 + s, -Settings.townSkipMargin);
@@ -105,7 +105,7 @@ namespace MysticMap.World
         {
             if (Terrain == null) return Settings.baseHeight;
 
-            if (Town != null && Town.InsideLegacy(x, z) && Town.legacyTerrain != null)
+            if (Town != null && Town.HasUsableTown && Town.InsideLegacy(x, z) && Town.legacyTerrain != null)
                 return Town.legacyTerrain.SampleHeight(new Vector3(x, 0f, z));
 
             if (liveChunk != null && liveChunk.Data != null)

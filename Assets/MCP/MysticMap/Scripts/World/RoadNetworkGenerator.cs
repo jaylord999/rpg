@@ -109,7 +109,7 @@ namespace MysticMap.World
 
             if (_town == null) return;
             _town.EnsureReady();
-            if (!_town.HasLegacy) return;
+            if (!_town.HasUsableTown) return;   // no real hand-built map: nothing to connect to
 
             var exits = _town.AllExits();
             for (int e = 0; e < exits.Length; e++)
@@ -167,7 +167,7 @@ namespace MysticMap.World
         /// </summary>
         bool ClosedByLegacy(RoadEdgeKey key)
         {
-            if (_town == null || !_town.HasLegacy) return false;
+            if (_town == null || !_town.HasUsableTown) return false;
 
             Vector2 ma = EdgeMidpoint(key);
             return _town.OutsideDistance(ma.x, ma.y) <= 0.5f;

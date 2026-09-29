@@ -1512,6 +1512,10 @@ namespace MysticMap.EditorTools
 
                 // Reflect the change immediately (even in the Scene view), not only after
                 // pressing Play. PropStreamer keeps this updated as you move in Play mode.
+                //
+                // Only the RENDERERS are toggled here. Disabling the GameObject would switch
+                // its colliders off too, so a prop the player is standing on could vanish and
+                // drop them straight through the ground.
                 float sqrG = grassDist * grassDist;
                 float sqrGl = glowDist * glowDist;
                 int n = root.transform.childCount;
@@ -1521,12 +1525,19 @@ namespace MysticMap.EditorTools
                     if (ch == null) continue;
                     float sqr = (ch.position - camPos).sqrMagnitude;
                     bool on = sqr <= sqrG;
-                    if (ch.gameObject.activeSelf != on) ch.gameObject.SetActive(on);
+
+                    foreach (var r in ch.GetComponentsInChildren<Renderer>(true))
+                        if (r != null && r.enabled != on) r.enabled = on;
+
                     if (on)
                     {
                         var glow = ch.Find("GlowSprite");
                         if (glow != null)
-                            glow.gameObject.SetActive(sqr <= sqrGl);
+                        {
+                            bool glowOn = sqr <= sqrGl;
+                            foreach (var gr in glow.GetComponentsInChildren<Renderer>(true))
+                                if (gr != null && gr.enabled != glowOn) gr.enabled = glowOn;
+                        }
                     }
                 }
             }

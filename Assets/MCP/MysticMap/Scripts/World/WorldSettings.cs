@@ -72,8 +72,21 @@ namespace MysticMap.World
         public float maxHeight = 140f;
         [Tooltip("Ground level the rolling biomes start from (metres).")]
         public float baseHeight = 20f;
-        [Tooltip("Blend band (metres) where procedural ground meets the hand-built map.")]
+        [Tooltip("Blend band (metres) where procedural ground meets the hand-built map. " +
+                 "Beyond this distance the procedural world grows freely - lower it to reach " +
+                 "new hills sooner, raise it for a wider, gentler transition.")]
         public float seamBand = 180f;
+
+        [Header("Endless country")]
+        [Tooltip("Vertical scale of the hills in the endless world beyond the town. " +
+                 "1 = the authored strength, higher = taller and more dramatic country.")]
+        public float endlessHillScale = 1f;
+        [Tooltip("How far (metres) the endless country ramps up from the town edge to full " +
+                 "height. Stops a wall of hills appearing right outside the gate.")]
+        public float endlessRampDistance = 420f;
+        [Tooltip("Keeps the country immediately outside the town calm for this many metres, " +
+                 "so the roads leaving the gates stay walkable.")]
+        public float endlessCalmDistance = 220f;
 
         [Header("Roads")]
         [Tooltip("How much the road height rolls over long distances (metres).")]
@@ -149,6 +162,10 @@ namespace MysticMap.World
             maxHeight = Mathf.Clamp(maxHeight, 60f, 400f);
             baseHeight = Mathf.Clamp(baseHeight, 0f, maxHeight - 20f);
             seamBand = Mathf.Clamp(seamBand, 40f, 600f);
+
+            endlessHillScale = Mathf.Clamp(endlessHillScale, 0f, 4f);
+            endlessRampDistance = Mathf.Clamp(endlessRampDistance, 0f, 2000f);
+            endlessCalmDistance = Mathf.Clamp(endlessCalmDistance, 0f, 800f);
 
             roadRelief = Mathf.Clamp(roadRelief, 0f, 60f);
             roadHalfWidthNear = Mathf.Clamp(roadHalfWidthNear, 2f, 12f);

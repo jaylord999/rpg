@@ -3,48 +3,60 @@ using UnityEngine;
 namespace MysticMap
 {
     /// <summary>
-    /// Keeps a large set of scattered props performant by only keeping children active
-    /// when they are BOTH (a) close enough AND (b) roughly IN FRONT of the tracked camera.
+    /// Keeps a large set of scattered props performant by only keeping the *visuals* of each
+    /// child alive when it is BOTH (a) close enough AND (b) roughly IN FRONT of the tracked
+    /// camera.
     ///
-    /// Unity already skips *drawing* anything off-screen (automatic frustum culling), so this
-    /// script targets the CPU side: it deactivates props that are far away OR clearly behind
-    /// the camera, so they never tick Update(), glows or animation. That costs far less than
-    /// keeping a full circle of props alive all around the player.
+    /// IMPORTANT - this never disables a prop's GameObject or its colliders. Disabling the
+    /// whole object used to switch the colliders off too, so standing on a rock and turning
+    /// the camera away made the rock vanish and the player fall straight through it. Only the
+    /// renderers are toggled, so props stay solid wherever the camera points, while the draw
+    /// calls and glows that dominate the frame cost are still skipped.
     ///
     /// To avoid visible pop-in when the player turns or walks near the cut edge:
-    ///   - "keepBehindRadius" keeps a small all-around bubble always on, and
+    ///   - "keepBehindRadius" keeps a small all-around bubble always drawn, and
     ///   - radius + angle hysteresis means a prop has to drift clearly out of range before it
-    ///     is switched off again, and it pops back the moment it is comfortably back in view.
+    ///     is hidden again, and it reappears the moment it is comfortably back in view.
     /// </summary>
     public class PropStreamer : MonoBehaviour
     {
         [Tooltip("Who to measure distance and view direction from (usually the player camera).")]
         public Transform target;
 
-        [Tooltip("Max distance (m) at which props are kept active in front of the camera.")]
+        [Tooltip("Max distance (m) at which props are kept drawn in front of the camera.")]
         public float radius = 90f;
 
-        [Tooltip("Small all-around radius (m). Props this close are ALWAYS active no matter where the camera points, so turning/moving near them never causes pop-in.")]
+        [Tooltip("Small all-around radius (m). Props this close are ALWAYS drawn no matter where the camera points, so turning/moving near them never causes pop-in.")]
         public float keepBehindRadius = 25f;
 
-        [Tooltip("Only cull a prop once it sits MORE than this many degrees from the camera's forward direction. 90 = front half only; ~110-130 adds a buffer so props at the sides don't flicker.")]
+        [Tooltip("Only hide a prop once it sits MORE than this many degrees from the camera's forward direction. 90 = front half only; ~110-130 adds a buffer so props at the sides don't flicker.")]
         [Range(90f, 170f)]
         public float behindCullAngle = 115f;
 
-        [Tooltip("Hysteresis multiplier: a shown prop must drift to this larger distance / this wider angle before it is hidden, preventing flicker at the cut boundary.")]
+        [Tooltip("Hysteresis multiplier: a drawn prop must drift to this larger distance / this wider angle before it is hidden, preventing flicker at the cut boundary.")]
         [Range(1.02f, 2f)]
         public float hysteresis = 1.2f;
 
         [Tooltip("How often (seconds) the distance/view check runs. Larger = cheaper.")]
         public float checkInterval = 0.35f;
 
+        [Tooltip("Never hide props that the player can stand on or bump into. Safety net that keeps " +
+                 "colliders reliable; the renderer-only culling above already leaves colliders alone.")]
+        public bool neverHideCollidableProps = true;
+
         Transform[] _children;
         bool[] _shown;
+
+        // Cached renderers per child (the visuals we are allowed to toggle).
+        Renderer[][] _renderers;
+        // Children that carry a collider and therefore must never be hidden.
+        bool[] _hasCollider;
+
         float _timer;
 
         float _keepBehindSqr;
-        float _activateCos;      // cos(cull angle): threshold to switch a prop ON
-        float _deactivateCos;    // cos(cull angle * hysteresis): threshold to switch OFF
+        float _activateCos;      // cos(cull angle): threshold to show a prop
+        float _deactivateCos;    // cos(cull angle * hysteresis): threshold to hide
         float _deactivateRadius; // radius * hysteresis
 
         void Start()
@@ -69,15 +81,31 @@ namespace MysticMap
             if (target == null) target = transform;
         }
 
-        void Collect()
+        /// <summary>Re-reads the children, their renderers and whether they are collidable.</summary>
+        public void Collect()
         {
             int n = transform.childCount;
             _children = new Transform[n];
             _shown = new bool[n];
+            _renderers = new Renderer[n][];
+            _hasCollider = new bool[n];
+
             for (int i = 0; i < n; i++)
             {
-                _children[i] = transform.GetChild(i);
-                _shown[i] = _children[i] != null && _children[i].gameObject.activeSelf;
+                Transform ch = transform.GetChild(i);
+                _children[i] = ch;
+
+                if (ch == null)
+                {
+                    _renderers[i] = new Renderer[0];
+                    continue;
+                }
+
+                // includeInactive: true, so a prop still switched off by the old behaviour is
+                // picked up and can be brought back.
+                _renderers[i] = ch.GetComponentsInChildren<Renderer>(true);
+                _hasCollider[i] = ch.GetComponentInChildren<Collider>(true) != null;
+                _shown[i] = VisualEnabled(_renderers[i]);
             }
         }
 
@@ -113,26 +141,30 @@ namespace MysticMap
                 Transform ch = _children[i];
                 if (ch == null) continue;
 
-                bool on = ShouldShow(ch, camPos, fwd, _shown[i]);
-                if (ch.gameObject.activeSelf != on)
+                bool on = ShouldShow(ch, camPos, fwd, _shown[i], _hasCollider[i]);
+                if (on != _shown[i])
                 {
-                    ch.gameObject.SetActive(on);
+                    SetVisible(_renderers[i], on);
                     _shown[i] = on;
                 }
             }
         }
 
-        // Decides whether one prop should be active for this check.
-        bool ShouldShow(Transform ch, Vector3 camPos, Vector3 fwd, bool shown)
+        // Decides whether one prop's visuals should be drawn for this check.
+        bool ShouldShow(Transform ch, Vector3 camPos, Vector3 fwd, bool shown, bool solid)
         {
+            // Props the player can stand on / collide with are never hidden, so a collider can
+            // never blink out from under the player no matter where the camera looks.
+            if (neverHideCollidableProps && solid) return true;
+
             Vector3 toObj = ch.position - camPos;
             float distSqr = toObj.sqrMagnitude;
 
-            // Always-kept bubble: props this close stay on regardless of facing, so you
+            // Always-kept bubble: props this close stay drawn regardless of facing, so you
             // never see pop-in while turning/moving through the nearby world.
             if (distSqr <= _keepBehindSqr) return true;
 
-            // Distance test with hysteresis: switch on within "radius", only switch off
+            // Distance test with hysteresis: show within "radius", only hide
             // once it goes beyond "radius * hysteresis".
             float maxDist = shown ? _deactivateRadius : radius;
             if (distSqr > maxDist * maxDist) return false;
@@ -146,6 +178,25 @@ namespace MysticMap
                 : 1f;
 
             return cosA >= (shown ? _deactivateCos : _activateCos);
+        }
+
+        /// <summary>Renderer-only visibility: the GameObject and its colliders stay untouched.</summary>
+        static void SetVisible(Renderer[] renderers, bool on)
+        {
+            if (renderers == null) return;
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer r = renderers[i];
+                if (r != null && r.enabled != on) r.enabled = on;
+            }
+        }
+
+        static bool VisualEnabled(Renderer[] renderers)
+        {
+            if (renderers == null || renderers.Length == 0) return true;
+            for (int i = 0; i < renderers.Length; i++)
+                if (renderers[i] != null && renderers[i].enabled) return true;
+            return false;
         }
 
         void OnDrawGizmosSelected()

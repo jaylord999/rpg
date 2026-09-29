@@ -39,6 +39,11 @@ namespace MysticMap.World
         Vector2 _size;
         bool _ready;
 
+        // True only when the rectangle came from a real Terrain. When no terrain is found the
+        // fields below hold a guess for the gizmos, and the world must treat the town as absent
+        // instead of flattening everything to the edge of that guess.
+        bool _fromTerrain;
+
         /// <summary>Bottom-left corner of the hand-built rectangle in world space.</summary>
         public Vector2 Origin { get { EnsureReady(); return _origin; } }
 
@@ -46,6 +51,14 @@ namespace MysticMap.World
         public Vector2 Size { get { EnsureReady(); return _size; } }
 
         public bool HasLegacy { get { EnsureReady(); return legacyTerrain != null && legacyTerrain.terrainData != null; } }
+
+        /// <summary>
+        /// True when there is a hand-built map AND its rectangle is real. <see cref="HasLegacy"/>
+        /// alone is not enough: when the scene has no Terrain the rectangle is only a guess used
+        /// for the gizmos, and blending the endless world to its edge would leave a flat plateau
+        /// stretching away in every direction.
+        /// </summary>
+        public bool HasUsableTown { get { EnsureReady(); return HasLegacy && _fromTerrain; } }
 
         /// <summary>See <see cref="ILegacyMap.LogAlignment"/>.</summary>
         public bool LogAlignment => logAlignment;
@@ -73,12 +86,14 @@ namespace MysticMap.World
                 Vector3 s = legacyTerrain.terrainData.size;
                 _origin = new Vector2(p.x, p.z);
                 _size = new Vector2(s.x, s.z);
+                _fromTerrain = true;
             }
             else
             {
                 // Sensible default for this project (MysticMapBuilder uses a 1 km map at 0,0).
                 _origin = Vector2.zero;
                 _size = new Vector2(1000f, 1000f);
+                _fromTerrain = false;
             }
 
             _ready = true;
@@ -95,7 +110,7 @@ namespace MysticMap.World
         public bool InsideLegacy(float x, float z)
         {
             EnsureReady();
-            if (!HasLegacy) return false;
+            if (!HasUsableTown) return false;
             return x >= _origin.x && x <= _origin.x + _size.x &&
                    z >= _origin.y && z <= _origin.y + _size.y;
         }
@@ -104,10 +119,29 @@ namespace MysticMap.World
         public float OutsideDistance(float x, float z)
         {
             EnsureReady();
-            if (!HasLegacy) return 1e6f;    // no hand-built map: nothing to blend to
+            if (!HasUsableTown) return 1e6f;    // no hand-built map: nothing to blend to
             float dx = Mathf.Max(_origin.x - x, x - (_origin.x + _size.x), 0f);
             float dz = Mathf.Max(_origin.y - z, z - (_origin.y + _size.y), 0f);
             return Mathf.Sqrt(dx * dx + dz * dz);
+        }
+
+        /// <summary>
+        /// How much of the procedural world applies at a point: 0 right at the hand-built edge,
+        /// 1 once <paramref name="band"/> metres out, and clamped at 1 for ever beyond that.
+        ///
+        /// The clamp is the important part - without it the town's edge height is projected
+        /// outwards indefinitely and the endless world degrades into a flat plateau instead of
+        /// growing new hills.
+        /// </summary>
+        public float SeamWeight(float x, float z, float band)
+        {
+            if (!HasUsableTown) return 1f;     // nothing to blend to: full procedural country
+            if (band <= 0.01f) return 1f;
+
+            float d = OutsideDistance(x, z);
+            if (d >= band) return 1f;          // fully procedural: new hills may rise here
+
+            return ProcNoise.Smoothstep(0f, band, d);
         }
 
         /// <summary>Closest point on (or in) the rectangle - used to sample the edge height.</summary>
@@ -140,7 +174,7 @@ namespace MysticMap.World
         public bool OverlapsLegacy(float x0, float z0, float x1, float z1, float margin)
         {
             EnsureReady();
-            if (!HasLegacy) return false;
+            if (!HasUsableTown) return false;
             return x0 <= _origin.x + _size.x + margin && x1 >= _origin.x - margin &&
                    z0 <= _origin.y + _size.y + margin && z1 >= _origin.y - margin;
         }

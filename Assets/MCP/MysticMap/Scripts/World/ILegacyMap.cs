@@ -12,6 +12,12 @@ namespace MysticMap.World
         /// <summary>True when there is a hand-built map to work around.</summary>
         bool HasLegacy { get; }
 
+        /// <summary>
+        /// True when the hand-built rectangle is real (it came from a Terrain). False means the
+        /// world must generate freely, with no seam blending at all.
+        /// </summary>
+        bool HasUsableTown { get; }
+
         /// <summary>Bottom-left corner of the hand-built rectangle (world XZ).</summary>
         Vector2 Origin { get; }
 
@@ -30,6 +36,12 @@ namespace MysticMap.World
 
         /// <summary>Height of the hand-built ground projected to the nearest edge point.</summary>
         float EdgeHeight(float x, float z);
+
+        /// <summary>
+        /// Blend factor for the seam: 0 at the hand-built edge, 1 once <c>band</c> metres out and
+        /// clamped at 1 beyond that so the procedural world keeps generating new land.
+        /// </summary>
+        float SeamWeight(float x, float z, float band);
 
         /// <summary>Does the given rectangle touch the hand-built map?</summary>
         bool OverlapsLegacy(float x0, float z0, float x1, float z1, float margin);

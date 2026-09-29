@@ -48,6 +48,27 @@ namespace MysticMap.World
             float detail = ProcNoise.Fbm(x * 0.021f, z * 0.021f, salt + 1601u, 3) - 0.5f;
             float ridge = ProcNoise.Ridged(x * 0.0095f, z * 0.0095f, salt + 1901u, 4);
 
+            // ---- endless country --------------------------------------------
+            // Outside the town the land is allowed to grow: a ramp so taller country only
+            // appears further out, and calm ground right past the gates so the roads stay
+            // walkable. Both come from the distance to the hand-built rectangle, so the whole
+            // field stays a pure function of (seed, x, z) and needs no bounds to stop at.
+            float outward = 1f;
+            float calm = 0f;
+            if (_town != null && _town.HasUsableTown)
+            {
+                float d = _town.OutsideDistance(x, z);
+                outward = _s.endlessRampDistance <= 0.01f
+                    ? 1f
+                    : ProcNoise.Smoothstep(0f, _s.endlessRampDistance, d);
+                calm = _s.endlessCalmDistance <= 0.01f
+                    ? 0f
+                    : 1f - ProcNoise.Smoothstep(_s.endlessCalmDistance, _s.endlessCalmDistance * 2f, d);
+            }
+
+            float hillGain = Mathf.Lerp(1f, Mathf.Max(1f, _s.endlessHillScale), outward);
+            float calmGain = Mathf.Lerp(1f, 0.35f, calm);
+
             float h = _s.baseHeight;
             h += w.meadow * (6f + hills * 11f);
             h += w.forest * (12f + hills * 17f);
@@ -59,14 +80,21 @@ namespace MysticMap.World
             // A little roughness everywhere so no biome reads as a flat plane.
             h += detail * (2.2f + w.rocky * 4f);
 
-            return Mathf.Clamp(h, 4f, _s.maxHeight);
+            // Lift the whole shaped landscape (not baseHeight) so the gains cannot push the
+            // ground below baseHeight, and scale it by the endless ramp + the gate calm band.
+            float shaped = h - _s.baseHeight;
+            return Mathf.Clamp(_s.baseHeight + shaped * hillGain * calmGain, 4f, _s.maxHeight);
         }
 
-        /// <summary>1 far from the hand-built map, 0 right at its edge.</summary>
+        /// <summary>
+        /// 1 far from the hand-built map, 0 right at its edge. Delegates to the town so the
+        /// value is clamped to 1 beyond the seam band - that clamp is what lets the world keep
+        /// generating new hills instead of holding the town's edge height for ever.
+        /// </summary>
         public float SeamWeight(float x, float z)
         {
-            if (_town == null || !_town.HasLegacy) return 1f;
-            return ProcNoise.Smoothstep(0f, _s.seamBand, _town.OutsideDistance(x, z));
+            if (_town == null || !_town.HasUsableTown) return 1f;
+            return _town.SeamWeight(x, z, _s.seamBand);
         }
 
         /// <summary>Full terrain height at a world position (without a prepared road field).</summary>
@@ -100,7 +128,7 @@ namespace MysticMap.World
             }
 
             // ---- seam with the hand-built map ---------------------------------
-            if (_town != null && _town.HasLegacy)
+            if (_town != null && _town.HasUsableTown)
             {
                 float sw = SeamWeight(x, z);
                 if (sw < 0.999f)

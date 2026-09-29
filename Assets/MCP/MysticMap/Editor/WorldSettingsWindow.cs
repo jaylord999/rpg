@@ -97,8 +97,34 @@ namespace MysticMap.EditorTools
             settings.baseHeight = EditorGUILayout.Slider("Base height (m)", settings.baseHeight, 0f, 60f);
             settings.maxHeight = EditorGUILayout.Slider("Max height (m)", settings.maxHeight, 60f, 300f);
             settings.seamBand = EditorGUILayout.Slider(
-                new GUIContent("Seam blend (m)", "Distance over which the new ground blends into the hand-built map."),
-                settings.seamBand, 40f, 400f);
+                new GUIContent("Seam blend (m)", "Distance over which the new ground blends into the hand-built map. " +
+                                                "Beyond it the endless world grows freely."),
+                settings.seamBand, 40f, 600f);
+
+            EditorGUILayout.Space();
+            EditorGUILayout.LabelField(new GUIContent("Endless country",
+                "How the land beyond the town behaves. Everything past the gates is generated " +
+                "on demand around the player and never ends."), EditorStyles.boldLabel);
+
+            settings.endlessHillScale = EditorGUILayout.Slider(
+                new GUIContent("Hill scale", "1 = authored strength. Higher = taller, more dramatic hills out in the wild."),
+                settings.endlessHillScale, 0f, 3f);
+
+            settings.endlessRampDistance = EditorGUILayout.Slider(
+                new GUIContent("Ramp up over (m)", "The far country reaches full height this many metres from the town edge."),
+                settings.endlessRampDistance, 0f, 1500f);
+
+            settings.endlessCalmDistance = EditorGUILayout.Slider(
+                new GUIContent("Calm past the gates (m)", "Keeps the ground gentle this close to the town so the gate roads stay walkable."),
+                settings.endlessCalmDistance, 0f, 600f);
+
+            if (GUILayout.Button(new GUIContent("Release far chunks now",
+                "Free the chunks outside the current view radius so the new settings are picked up.")))
+            {
+                _manager.ClearAll();
+                _manager.Refresh(true);
+                EditorUtility.SetDirty(_manager);
+            }
 
             _showRoads = EditorGUILayout.Foldout(_showRoads, "Roads", true);
             if (_showRoads)
