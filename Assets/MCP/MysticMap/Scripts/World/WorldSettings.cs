@@ -47,7 +47,10 @@ namespace MysticMap.World
         public int seed = 12345;
 
         [Header("Streaming")]
-        [Tooltip("Size of one square chunk in metres. The town grid is aligned to this.")]
+        [Tooltip("Size of one square chunk in metres. The town grid is aligned to this, so the " +
+                 "value must divide the town's road exits (they sit on a 100 m grid - see " +
+                 "MysticMapBuilder.RoadGrid). 100 keeps the gate roads exactly on the lattice; " +
+                 "40 or any other non-divisor leaves them ~20 m off and the roads will not line up.")]
         public float chunkSize = 100f;
         [Tooltip("How many chunks of terrain are kept around the player (radius in chunks).")]
         public int viewRadiusChunks = 3;

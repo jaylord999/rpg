@@ -12,13 +12,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cdb7fbd41ae30c24b950c941fd2276be, type: 3}
   m_Name: MagicTuningLastPlay
   m_EditorClassIdentifier: Assembly-CSharp::MysticMap.MagicTuningPreset
-  circleScale: 1.6
-  circleHeightScale: 0.25
-  chargeSwell: 0.284
+  circleScale: 1.35
+  circleHeightScale: 1
+  chargeSwell: 0.22
   chargeSpinUp: 1.2
   swapCirclesEachLevel: 1
   circlesBounceWithSlime: 0
-  groundLift: 0
+  groundLift: 0.03
   groundMask:
     serializedVersion: 2
     m_Bits: 4294967295
@@ -39,7 +39,7 @@ MonoBehaviour:
   layout: 4
   levels:
   - name: Gale Slash
-    holdToReach: 1
+    holdToReach: 0
     damage: 14
     circleScale: 1
     environmentScale: 1
